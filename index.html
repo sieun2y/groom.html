@@ -174,12 +174,13 @@
   <!-- 접수내역 -->
   <div id="page-records" class="page">
     <div class="card">
-      <div class="list-header">
-  <h2>📋 신랑측 접수내역</h2>
-  <div style="display: flex; gap: 6px;">
+      <div class="list-header" style="flex-wrap: wrap; gap: 10px;">
+  <h2 style="margin: 0;">📋 신랑측 접수내역</h2>
+  <div style="display: flex; gap: 6px; margin-left: auto;">
     <button type="button" class="refresh-button" onclick="downloadExcel()">📊 엑셀 다운</button>
     <button type="button" class="refresh-button" onclick="loadRecords()">🔄 새로고침</button>
   </div>
+</div>
       <input id="search" class="search" type="text" placeholder="🔎 이름 검색" oninput="renderRecords()">
       <div id="recordList">
         <div class="empty">불러오는 중...</div>
