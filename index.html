@@ -450,31 +450,39 @@
     return String(val).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
-  function downloadExcel() {
+ function downloadExcel() {
     const sideRecords = records.filter(function(item) { return item.side === fixedSide; });
     if (!sideRecords || sideRecords.length === 0) {
       alert("다운로드할 신랑측 접수내역이 없습니다.");
       return;
     }
-    let excelContent = "구분\t봉투번호\t이름\t금액\t대인식권\t소인식권\t답례봉투\t접수방법\t메모\t접수일시\n";
+
+    // 엑셀 칸(열)을 정확히 나누기 위해 탭(\t) 대신 쉼표(,)를 사용하고 항목에 쉼표가 있을 경우를 대비해 큰따옴표로 감쌉니다.
+    let csvContent = "\uFEFF"; // 한글 깨짐 방지 BOM
+    csvContent += "구분,봉투번호,이름,금액,대인식권,소인식권,답례봉투,접수방법,메모,접수일시\n";
+
     sideRecords.forEach(function(item) {
       const side = item.side || "";
       const envNum = item.envelope_number || "";
-      const name = item.name || "";
+      const name = `"${(item.name || "").replace(/"/g, '""')}"`;
       const amount = item.amount || 0;
       const adult = item.adult_meal || 0;
       const child = item.child_meal || 0;
       const reply = item.reply_envelope || 0;
       const payment = item.payment_method || "";
-      const memo = (item.memo || "").replace(/\n/g, " ");
-      const date = item.created_at ? new Date(item.created_at).toLocaleString() : "";
-      excelContent += `${side}\t${envNum}\t${name}\t${amount}\t${adult}\t${child}\t${reply}\t${payment}\t${memo}\t${date}\n`;
+      const memo = `"${(item.memo || "").replace(/\n/g, " ").replace(/"/g, '""')}"`;
+      const date = item.created_at ? `"${new Date(item.created_at).toLocaleString()}"` : "";
+
+      csvContent += `${side},${envNum},${name},${amount},${adult},${child},${reply},${payment},${memo},${date}\n`;
     });
-    const blob = new Blob(["\uFEFF" + excelContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+
+    // 확장자를 .csv로 지정하면 엑셀이 자동으로 열면서 칸을 예쁘게 분리해줍니다.
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = fixedSide + "_접수내역.xls";
+    a.download = fixedSide + "_접수내역.csv";
+    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
