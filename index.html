@@ -105,8 +105,13 @@
       </div>
       <div id="editEnvelopeNumberTitle">봉투번호 수정</div>
       <input id="editEnvelopeNumber" type="number" min="1" placeholder="수정할 봉투번호" style="display:none;">
-      <span class="label">이름</span>
-      <input id="name" type="text" placeholder="이름을 입력하세요" autocomplete="off">
+      
+      <span class="label">이름 및 소속(관계)</span>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 17px;">
+        <input id="name" type="text" placeholder="이름 (예: 홍길동)" autocomplete="off" style="margin-bottom: 0;">
+        <input id="relation" type="text" placeholder="소속/관계 (예: OO회사 동기)" autocomplete="off" style="margin-bottom: 0;">
+      </div>
+
       <span class="label">축의금</span>
       <div class="amount-buttons">
         <button type="button" class="amount-button" onclick="setAmount(50000)">5만원</button>
@@ -164,7 +169,7 @@
           <button type="button" class="refresh-button" onclick="loadRecords()">🔄 새로고침</button>
         </div>
       </div>
-      <input id="search" class="search" type="text" placeholder="🔎 이름 검색" oninput="renderRecords()">
+      <input id="search" class="search" type="text" placeholder="🔎 이름 또는 소속 검색" oninput="renderRecords()">
       <div id="recordList">
         <div class="empty">불러오는 중...</div>
       </div>
@@ -285,6 +290,7 @@
 
   function resetForm() {
     document.getElementById("name").value = "";
+    document.getElementById("relation").value = "";
     document.getElementById("amount").value = "";
     document.getElementById("adultMeal").value = "0";
     document.getElementById("childMeal").value = "0";
@@ -300,6 +306,7 @@
 
   async function submitGift() {
     const name = document.getElementById("name").value.trim();
+    const relation = document.getElementById("relation").value.trim();
     const amount = Number(document.getElementById("amount").value);
     const adultMeal = Number(document.getElementById("adultMeal").value) || 0;
     const childMeal = Number(document.getElementById("childMeal").value) || 0;
@@ -320,14 +327,14 @@
         const envelopeNumber = Number(document.getElementById("editEnvelopeNumber").value);
         if (!envelopeNumber || envelopeNumber <= 0) { alert("봉투번호를 입력해주세요."); document.getElementById("editEnvelopeNumber").focus(); return; }
         const result = await supabaseClient.from("gifts").update({
-          side: fixedSide, envelope_number: envelopeNumber, name: name, amount: amount,
+          side: fixedSide, envelope_number: envelopeNumber, name: name, relation: relation || null, amount: amount,
           adult_meal: adultMeal, child_meal: childMeal, reply_envelope: replyEnvelope,
           payment_method: selectedPayment, memo: memo || null
         }).eq("id", editingRecordId).select().single();
         if (result.error) { alert("수정 실패: " + result.error.message); return; }
         syncGoogleSheet("update", {
           id: String(editingRecordId), envelope_number: envelopeNumber, side: fixedSide,
-          name: name, relation: "", amount: amount, adult_meal: adultMeal, child_meal: childMeal,
+          name: name, relation: relation || "", amount: amount, adult_meal: adultMeal, child_meal: childMeal,
           reply_envelope: replyEnvelope, payment_method: selectedPayment, memo: memo || ""
         });
         alert(name + "님의 접수내역이 수정되었습니다!");
@@ -342,14 +349,14 @@
 
       const envelopeNumber = nextEnvelopeNumber;
       const result = await supabaseClient.from("gifts").insert({
-        side: fixedSide, envelope_number: envelopeNumber, name: name, amount: amount,
+        side: fixedSide, envelope_number: envelopeNumber, name: name, relation: relation || null, amount: amount,
         adult_meal: adultMeal, child_meal: childMeal, reply_envelope: replyEnvelope,
         payment_method: selectedPayment, memo: memo || null
       }).select().single();
       if (result.error) { alert("저장 실패: " + result.error.message); return; }
       syncGoogleSheet("insert", {
         id: result.data?.id ? String(result.data.id) : "", envelope_number: envelopeNumber,
-        side: fixedSide, name: name, relation: "", amount: amount, adult_meal: adultMeal,
+        side: fixedSide, name: name, relation: relation || "", amount: amount, adult_meal: adultMeal,
         child_meal: childMeal, reply_envelope: replyEnvelope, payment_method: selectedPayment, memo: memo || ""
       });
       status.textContent = "✅ 접수가 완료되었습니다!";
@@ -398,6 +405,7 @@
     document.getElementById("editEnvelopeNumberTitle").style.display = "block";
     document.getElementById("editEnvelopeNumber").style.display = "block";
     document.getElementById("name").value = item.name || "";
+    document.getElementById("relation").value = item.relation || "";
     document.getElementById("amount").value = item.amount || "";
     document.getElementById("adultMeal").value = item.adult_meal || 0;
     document.getElementById("childMeal").value = item.child_meal || 0;
@@ -427,7 +435,11 @@
     if (!list) return;
     const search = document.getElementById("search") ? document.getElementById("search").value.trim().toLowerCase() : "";
     const filtered = records.filter(function(item) {
-      return item.side === fixedSide && (!search || String(item.name || "").toLowerCase().includes(search));
+      if (item.side !== fixedSide) return false;
+      if (!search) return true;
+      const nameMatch = String(item.name || "").toLowerCase().includes(search);
+      const relationMatch = String(item.relation || "").toLowerCase().includes(search);
+      return nameMatch || relationMatch;
     });
     if (filtered.length === 0) {
       list.innerHTML = '<div class="empty">신랑측 접수내역이 없습니다.</div>';
@@ -435,6 +447,7 @@
     }
     list.innerHTML = filtered.map(function(item) {
       const name = item.name || "-";
+      const relationText = item.relation ? ` (${escapeHtml(item.relation)})` : "";
       const envNum = item.envelope_number ? "신랑측 " + Number(item.envelope_number) + "번" : "신랑측";
       const amount = Number(item.amount || 0).toLocaleString();
       const adult = Number(item.adult_meal || 0) > 0 ? `<span>🎫 대인 ${item.adult_meal}장</span>` : "";
@@ -442,7 +455,7 @@
       const reply = Number(item.reply_envelope || 0) > 0 ? `<span>💌 답례봉투 ${item.reply_envelope}개</span>` : "";
       const payment = item.payment_method === "계좌이체" ? "🏦 계좌이체" : "💵 현금";
       const memo = item.memo ? `<div class="memo-text">📝 ${escapeHtml(item.memo)}</div>` : "";
-      return `<div class="record"><div class="record-main"><div class="record-name">${escapeHtml(name)}</div><div class="record-amount">${amount}원</div></div><div class="record-info"><span class="badge side-badge groom">${escapeHtml(envNum)}</span><span class="badge">${payment}</span>${adult} ${child} ${reply}</div>${memo}<button type="button" class="edit-button" onclick="editRecord('${item.id}')">✏️ 수정</button><button type="button" class="delete-button" onclick="deleteRecord('${item.id}')">🗑 삭제</button></div>`;
+      return `<div class="record"><div class="record-main"><div class="record-name">${escapeHtml(name)}${relationText}</div><div class="record-amount">${amount}원</div></div><div class="record-info"><span class="badge side-badge groom">${escapeHtml(envNum)}</span><span class="badge">${payment}</span>${adult} ${child} ${reply}</div>${memo}<button type="button" class="edit-button" onclick="editRecord('${item.id}')">✏️ 수정</button><button type="button" class="delete-button" onclick="deleteRecord('${item.id}')">🗑 삭제</button></div>`;
     }).join("");
   }
 
@@ -450,21 +463,19 @@
     return String(val).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
- function downloadExcel() {
+  function downloadExcel() {
     const sideRecords = records.filter(function(item) { return item.side === fixedSide; });
     if (!sideRecords || sideRecords.length === 0) {
       alert("다운로드할 신랑측 접수내역이 없습니다.");
       return;
     }
-
-    // 엑셀 칸(열)을 정확히 나누기 위해 탭(\t) 대신 쉼표(,)를 사용하고 항목에 쉼표가 있을 경우를 대비해 큰따옴표로 감쌉니다.
-    let csvContent = "\uFEFF"; // 한글 깨짐 방지 BOM
-    csvContent += "구분,봉투번호,이름,금액,대인식권,소인식권,답례봉투,접수방법,메모,접수일시\n";
-
+    let csvContent = "\uFEFF";
+    csvContent += "구분,봉투번호,이름,소속/관계,금액,대인식권,소인식권,답례봉투,접수방법,메모,접수일시\n";
     sideRecords.forEach(function(item) {
       const side = item.side || "";
       const envNum = item.envelope_number || "";
       const name = `"${(item.name || "").replace(/"/g, '""')}"`;
+      const relation = `"${(item.relation || "").replace(/"/g, '""')}"`;
       const amount = item.amount || 0;
       const adult = item.adult_meal || 0;
       const child = item.child_meal || 0;
@@ -472,17 +483,13 @@
       const payment = item.payment_method || "";
       const memo = `"${(item.memo || "").replace(/\n/g, " ").replace(/"/g, '""')}"`;
       const date = item.created_at ? `"${new Date(item.created_at).toLocaleString()}"` : "";
-
-      csvContent += `${side},${envNum},${name},${amount},${adult},${child},${reply},${payment},${memo},${date}\n`;
+      csvContent += `${side},${envNum},${name},${relation},${amount},${adult},${child},${reply},${payment},${memo},${date}\n`;
     });
-
-    // 확장자를 .csv로 지정하면 엑셀이 자동으로 열면서 칸을 예쁘게 분리해줍니다.
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = fixedSide + "_접수내역.csv";
-    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
