@@ -175,9 +175,11 @@
   <div id="page-records" class="page">
     <div class="card">
       <div class="list-header">
-        <h2>📋 신랑측 접수내역</h2>
-        <button type="button" class="refresh-button" onclick="loadRecords()">🔄 새로고침</button>
-      </div>
+  <h2>📋 신랑측 접수내역</h2>
+  <div style="display: flex; gap: 6px;">
+    <button type="button" class="refresh-button" onclick="downloadExcel()">📊 엑셀 다운</button>
+    <button type="button" class="refresh-button" onclick="loadRecords()">🔄 새로고침</button>
+  </div>
       <input id="search" class="search" type="text" placeholder="🔎 이름 검색" oninput="renderRecords()">
       <div id="recordList">
         <div class="empty">불러오는 중...</div>
@@ -505,7 +507,49 @@
   function escapeHtml(val) {
     return String(val).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
+/* =====================================
+     엑셀(.xls) 파일 다운로드 기능
+  ===================================== */
+  function downloadExcel() {
+    if (!records || records.length === 0) {
+      alert("다운로드할 접수내역이 없습니다.");
+      return;
+    }
 
+    // 엑셀에 들어갈 테이블 헤더 (열 이름)
+    let excelContent = "구분\t봉투번호\t이름\t금액\t대인식권\t소인식권\t답례봉투\t접수방법\t메모\t접수일시\n";
+
+    // 데이터 행 추가
+    records.forEach(function(item) {
+      const side = item.side || "";
+      const envNum = item.envelope_number || "";
+      const name = item.name || "";
+      const amount = item.amount || 0;
+      const adult = item.adult_meal || 0;
+      const child = item.child_meal || 0;
+      const reply = item.reply_envelope || 0;
+      const payment = item.payment_method || "";
+      const memo = (item.memo || "").replace(/\n/g, " "); // 줄바꿈 제거
+      const date = item.created_at ? new Date(item.created_at).toLocaleString() : "";
+
+      excelContent += `${side}\t${envNum}\t${name}\t${amount}\t${adult}\t${child}\t${reply}\t${payment}\t${memo}\t${date}\n`;
+    });
+
+    // 엑셀 파일 생성 및 다운로드 트리거 (UTF-8 BOM 추가로 한글 깨짐 방지)
+    const blob = new Blob(["\uFEFF" + excelContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    
+    // 파일 이름 설정 (신랑측/신부측 구분)
+    const fileName = (typeof fixedSide !== "undefined" ? fixedSide : "축의대") + "_접수내역.xls";
+    a.download = fileName;
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
   loadRecords();
 </script>
 </body>
